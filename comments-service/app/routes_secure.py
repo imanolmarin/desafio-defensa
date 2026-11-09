@@ -6,7 +6,7 @@ import subprocess
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from . import encoding, net
@@ -15,7 +15,7 @@ from .logging_conf import log_event
 from .paths import FILES_DIR, TEMPLATES_DIR
 from .sanitize import sanitize_html
 from .schemas import USERNAME_PATTERN, AvatarFetch, CommentIn, LoginIn, UserCreate
-from .validation import safe_path, validate_host, validate_outbound_url
+from .validation import safe_path, safe_redirect_target, validate_host, validate_outbound_url
 
 router = APIRouter(prefix="/secure", tags=["secure"])
 templates = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=select_autoescape(["html"]))
@@ -155,3 +155,10 @@ def login(payload: LoginIn):
 @router.get("/encode")
 def encode(value: Annotated[str, Query(max_length=200)]):
     return encoding.all_contexts(value)
+
+
+@router.get("/redirect")
+def redirect_after_login(next: str = "/"):
+    # Reto 3: solo paths relativos del mismo sitio y de una allowlist de prefijos.
+    # Un destino inválido no da error: se vuelve al inicio (fallar cerrado sin romper el flujo).
+    return RedirectResponse(safe_redirect_target(next), status_code=302)

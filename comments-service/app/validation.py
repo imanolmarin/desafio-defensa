@@ -8,7 +8,7 @@ import re
 import socket
 import unicodedata
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 SAFE_FILENAME = re.compile(r"^[A-Za-z0-9_-]{1,64}\.(txt|png|pdf)$")
 HOSTNAME = re.compile(
@@ -73,3 +73,42 @@ def validate_outbound_url(url: str) -> str:
         if not ipaddress.ip_address(info[4][0]).is_global:
             raise ValueError("host resolves to a non-public address")
     return url
+
+
+# Reto 3: destinos internos a los que tiene sentido volver después del login.
+REDIRECT_ALLOWED_PREFIXES = ("/app/", "/secure/")
+REDIRECT_FALLBACK = "/"
+
+
+def _redirect_problem(target: str) -> str | None:
+    """Devuelve por qué el destino no es seguro, o None si lo es."""
+    if len(target) > 2048:
+        return "too long"
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in target):
+        return "control characters"  # tab/CR/LF: los navegadores los descartan y //evil aparece
+    if "\\" in target:
+        return "backslash"  # muchos navegadores tratan \ como /
+    if not target.startswith("/") or target.startswith("//"):
+        return "not a same-site relative path"
+    parts = urlsplit(target)
+    if parts.scheme or parts.netloc:
+        return "absolute URL"
+    # Una segunda decodificación no debe convertirlo en algo peligroso (%2F%2F, %5C, %2e%2e).
+    decoded_path = unquote(parts.path)
+    if decoded_path.startswith("//") or "\\" in decoded_path:
+        return "encoded host"
+    if any(segment in (".", "..") for segment in decoded_path.split("/")):
+        return "dot segments"  # /app/../vuln/... saltearía la allowlist de prefijos
+    if target != "/" and not target.startswith(REDIRECT_ALLOWED_PREFIXES):
+        return "path not in allowlist"
+    return None
+
+
+def safe_redirect_target(target) -> str:
+    """Allowlist de redirecciones: path relativo del mismo sitio, con prefijo conocido.
+
+    Falla cerrado: ante cualquier duda devuelve "/" en lugar de un error.
+    """
+    if not isinstance(target, str) or _redirect_problem(target) is not None:
+        return REDIRECT_FALLBACK
+    return target

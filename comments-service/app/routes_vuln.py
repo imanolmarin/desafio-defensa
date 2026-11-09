@@ -5,7 +5,7 @@ import os
 import subprocess
 
 from fastapi import APIRouter, Body
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from jinja2 import Environment, FileSystemLoader
 
 from . import net
@@ -96,3 +96,9 @@ def login(payload: dict = Body(...)):
     line = f"login failed for user {payload['username']}"
     logger.info(line)
     return {"logged": line}
+
+
+@router.get("/redirect")
+def redirect_after_login(next: str = "/"):
+    # Open redirect: redirige a cualquier destino.
+    return RedirectResponse(next, status_code=302)

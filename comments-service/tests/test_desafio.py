@@ -132,3 +132,50 @@ def test_reto2_encoder_unitario():
     assert spreadsheet_cell("-5") == "'-5"
     assert spreadsheet_cell("hola = chau") == "hola = chau"
     assert spreadsheet_cell("") == ""
+
+
+# ── Reto 3: open redirect ───────────────────────────────────────────────────
+
+
+def _location(client, base, target):
+    response = client.get(f"{base}/redirect", params={"next": target}, follow_redirects=False)
+    assert response.status_code == 302
+    return response.headers["location"]
+
+
+@pytest.mark.parametrize("target", ["https://evil.example/login", "//evil.example", "/\\evil.example"])
+def test_reto3_vuln_redirige_afuera(client, target):
+    location = _location(client, "/vuln", target)
+    assert "evil.example" in location
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "https://evil.example",
+        "https://evil.example/login",
+        "//evil.example",
+        "/\\evil.example",
+        "\\\\evil.example",
+        "/%2F%2Fevil.example",
+        "/%5Cevil.example",
+        "javascript:alert(document.domain)",
+        "JaVaScRiPt:alert(1)",
+        "data:text/html,<script>alert(1)</script>",
+        "https:evil.example",
+        "/\t/evil.example",
+        "/\r\n/evil.example",
+        "evil.example",
+        "/app/../vuln/redirect?next=https://evil.example",
+        "/app/%2e%2e/vuln/redirect",
+        "/vuln/comments",
+        "",
+    ],
+)
+def test_reto3_secure_rechaza_y_vuelve_al_inicio(client, target):
+    assert _location(client, "/secure", target) == "/"
+
+
+@pytest.mark.parametrize("target", ["/secure/comments", "/secure/comments?filter=x", "/app/", "/app/#alice", "/"])
+def test_reto3_secure_respeta_destinos_validos(client, target):
+    assert _location(client, "/secure", target) == target
