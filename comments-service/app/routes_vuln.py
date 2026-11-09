@@ -41,6 +41,15 @@ def sorted_comments(sort: str = "id", direction: str = "asc"):
     return [dict(r) for r in rows]
 
 
+@router.get("/comments/export.csv")
+def export_csv():
+    # CSV injection: los valores se escriben crudos en el archivo.
+    with get_conn() as conn:
+        rows = conn.execute("SELECT author, body FROM comments ORDER BY id").fetchall()
+    lines = ["author,body"] + [f"{r['author']},{r['body']}" for r in rows]
+    return PlainTextResponse("\n".join(lines), media_type="text/csv")
+
+
 @router.get("/comments", response_class=HTMLResponse)
 def list_comments(filter: str = ""):
     # XSS almacenado (sin autoescape) e inyección en contexto JS vía ?filter=.

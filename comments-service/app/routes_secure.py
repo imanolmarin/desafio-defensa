@@ -1,10 +1,12 @@
 """Versiones mitigadas de los endpoints de routes_vuln.py."""
 
+import csv
+import io
 import subprocess
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from . import encoding, net
@@ -52,6 +54,28 @@ def sorted_comments(
     with get_conn() as conn:
         rows = conn.execute(sql).fetchall()
     return [dict(r) for r in rows]
+
+
+@router.get("/comments/export.csv")
+def export_csv():
+    """Reto 2: dos contextos de salida, dos encoders.
+
+    - estructura del CSV (comas, comillas, saltos de línea): csv.writer con QUOTE_ALL;
+    - contenido de la celda (fórmulas): encoding.spreadsheet_cell.
+    Se codifica al exportar, así también salen neutralizadas las filas guardadas antes.
+    """
+    with get_conn() as conn:
+        rows = conn.execute("SELECT author, body FROM comments ORDER BY id").fetchall()
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
+    writer.writerow(["author", "body"])
+    for r in rows:
+        writer.writerow([encoding.spreadsheet_cell(r["author"]), encoding.spreadsheet_cell(r["body"])])
+    return Response(
+        buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="comments.csv"'},
+    )
 
 
 @router.get("/comments.json")

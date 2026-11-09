@@ -29,6 +29,24 @@ def log_value(value: str) -> str:
     return value.replace("\r", "\\r").replace("\n", "\\n")
 
 
+# Caracteres con los que una planilla (Excel, LibreOffice, Google Sheets) interpreta
+# la celda como fórmula. Tab y CR se incluyen porque algunas planillas los descartan
+# al importar y la celda termina empezando con el carácter siguiente.
+FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def spreadsheet_cell(value: str) -> str:
+    """Celda de planilla (CSV que se abre en Excel): neutraliza fórmulas (CWE-1236).
+
+    Antepone una comilla simple, que la planilla toma como "esto es texto". Solo
+    resuelve el contexto fórmula; comas, comillas y saltos de línea son el contexto
+    estructura del CSV y los resuelve csv.writer.
+    """
+    if value.startswith(FORMULA_TRIGGERS):
+        return "'" + value
+    return value
+
+
 def all_contexts(value: str) -> dict[str, str]:
     return {
         "raw": value,
@@ -36,4 +54,5 @@ def all_contexts(value: str) -> dict[str, str]:
         "js_string": js_string(value),
         "url_component": url_component(value),
         "log": log_value(value),
+        "spreadsheet_cell": spreadsheet_cell(value),
     }
