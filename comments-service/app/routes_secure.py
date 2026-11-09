@@ -1,7 +1,7 @@
 """Versiones mitigadas de los endpoints de routes_vuln.py."""
 
 import subprocess
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
@@ -28,6 +28,29 @@ def bad_request(message: str) -> HTTPException:
 def search_comments(author: Annotated[str, Query(pattern=USERNAME_PATTERN)]):
     with get_conn() as conn:
         rows = conn.execute("SELECT id, author, body FROM comments WHERE author = ?", (author,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+# Reto 1: los "?" solo sirven para VALORES. Columna y dirección son estructura de
+# la consulta, así que salen de estas tablas (código nuestro), nunca de la entrada.
+SORT_COLUMNS = {"id": "id", "author": "author"}
+SORT_DIRECTIONS = {"asc": "ASC", "desc": "DESC"}
+
+
+@router.get("/comments/sorted")
+def sorted_comments(
+    sort: Literal["id", "author"] = "id",
+    direction: Annotated[str, Query(max_length=4)] = "asc",
+):
+    order = SORT_DIRECTIONS.get(direction.lower())
+    if order is None:
+        # Se rechaza antes de tocar la base: sin consulta, sin oráculo.
+        raise HTTPException(status_code=422, detail="direction must be asc or desc")
+    column = SORT_COLUMNS[sort]
+    # id como segundo criterio: orden estable cuando hay autores repetidos.
+    sql = f"SELECT id, author, body FROM comments ORDER BY {column} {order}, id {order}"  # nosec B608 - fragmentos de allowlist
+    with get_conn() as conn:
+        rows = conn.execute(sql).fetchall()
     return [dict(r) for r in rows]
 
 

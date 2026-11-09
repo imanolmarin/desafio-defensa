@@ -33,6 +33,14 @@ def create_comment(payload: dict = Body(...)):
     return {"status": "created"}
 
 
+@router.get("/comments/sorted")
+def sorted_comments(sort: str = "id", direction: str = "asc"):
+    # Inyección en ORDER BY: identificadores interpolados en la consulta.
+    with get_conn() as conn:
+        rows = conn.execute(f"SELECT id, author, body FROM comments ORDER BY {sort} {direction}").fetchall()
+    return [dict(r) for r in rows]
+
+
 @router.get("/comments", response_class=HTMLResponse)
 def list_comments(filter: str = ""):
     # XSS almacenado (sin autoescape) e inyección en contexto JS vía ?filter=.
