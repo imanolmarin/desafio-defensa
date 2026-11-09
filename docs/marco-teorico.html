@@ -1,0 +1,907 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+html { color-scheme: light; }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
+<title>Entradas no confiables</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+/* Layout: índice fijo a la izquierda + columna de lectura; los datos "no confiables" se marcan en ámbar y los ya tratados en cobalto. */
+:root {
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --ink: #15202c;
+  --muted: #566577;
+  --line: #d3dae2;
+  --accent: #2155b8;
+  --accent-bg: #e4ecfa;
+  --taint: #9a5806;
+  --taint-bg: #fbf0dd;
+  --ok: #1b7446;
+  --ok-bg: #e2f3e9;
+  --bad: #b3261e;
+  --bad-bg: #fbe6e4;
+  --code-bg: #f4f6f9;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10161d; --surface: #18212b; --ink: #e4e9ef; --muted: #98a6b6; --line: #2c3845;
+    --accent: #86acf2; --accent-bg: #1a2a45; --taint: #e6a54d; --taint-bg: #34270f;
+    --ok: #62d097; --ok-bg: #12301f; --bad: #f28b81; --bad-bg: #3b1714; --code-bg: #121a22;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10161d; --surface: #18212b; --ink: #e4e9ef; --muted: #98a6b6; --line: #2c3845;
+  --accent: #86acf2; --accent-bg: #1a2a45; --taint: #e6a54d; --taint-bg: #34270f;
+  --ok: #62d097; --ok-bg: #12301f; --bad: #f28b81; --bad-bg: #3b1714; --code-bg: #121a22;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.6;
+}
+.shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-block: 40px 80px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 48px;
+}
+@media (max-width: 880px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 24px; padding-block: 24px 64px; }
+}
+
+/* Índice */
+.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; font-family: var(--font-display); }
+.toc p { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: toc; }
+.toc a {
+  display: block; padding: 6px 10px; border-radius: 6px; color: var(--ink);
+  text-decoration: none; font-size: 14px; border-left: 2px solid transparent;
+}
+.toc a:hover { background: var(--surface); }
+.toc a.active { border-left-color: var(--accent); color: var(--accent); background: var(--surface); }
+@media (max-width: 880px) {
+  .toc { position: static; }
+  .toc ol { display: flex; flex-wrap: wrap; gap: 6px; }
+  .toc a { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; }
+  .toc a.active { border-color: var(--accent); }
+}
+
+main { min-width: 0; display: grid; gap: 72px; }
+section { display: grid; gap: 20px; min-width: 0; scroll-margin-top: 24px; }
+
+h1, h2, h3, h4 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(40px, 7vw, 72px); font-weight: 800; font-stretch: 78%; letter-spacing: -.01em; }
+h2 { font-size: clamp(26px, 3.4vw, 34px); font-weight: 750; font-stretch: 85%; }
+h3 { font-size: 19px; font-weight: 700; }
+h4 { font-size: 13px; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font-family: var(--font-display); font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 20px; color: var(--muted); max-width: 60ch; }
+code, .mono { font-family: var(--font-mono); font-size: .86em; }
+:not(pre) > code { background: var(--code-bg); border: 1px solid var(--line); padding: 1px 5px; border-radius: 4px; }
+pre {
+  margin: 0; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 14px 16px; overflow-x: auto; font-family: var(--font-mono); font-size: 13.5px; line-height: 1.55;
+}
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Encabezado */
+.hero { display: grid; gap: 18px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.hero .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 13px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-family: var(--font-mono); font-size: 12.5px; white-space: nowrap; }
+.chip.taint { background: var(--taint-bg); color: var(--taint); }
+.chip.trust { background: var(--accent-bg); color: var(--accent); }
+.chip.ok { background: var(--ok-bg); color: var(--ok); }
+.chip.bad { background: var(--bad-bg); color: var(--bad); }
+.arrow { color: var(--muted); }
+
+/* Regla central */
+.rule { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.rule > div { background: var(--surface); padding: 20px; display: grid; gap: 8px; align-content: start; }
+.rule .where { font-family: var(--font-mono); font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.rule .verb { font-family: var(--font-display); font-size: 26px; font-weight: 800; font-stretch: 80%; color: var(--accent); }
+@media (max-width: 680px) { .rule { grid-template-columns: minmax(0, 1fr); } }
+.note { border-left: 3px solid var(--taint); background: var(--taint-bg); padding: 12px 16px; border-radius: 0 8px 8px 0; color: var(--ink); max-width: 72ch; }
+
+/* Principios */
+.principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 28px; }
+.principles div { display: grid; gap: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.principles p { font-size: 15.5px; color: var(--muted); }
+
+/* Conceptos */
+.concept-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab {
+  font-family: var(--font-display); font-size: 14px; font-weight: 600; cursor: pointer;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 14px;
+}
+.tab:hover { border-color: var(--accent); }
+.tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px; display: grid; gap: 16px; }
+.panel .question { font-size: 21px; font-style: italic; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.facts > div { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.facts p { font-size: 15.5px; }
+.compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.compare > div { display: grid; gap: 8px; padding: 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
+@media (max-width: 680px) { .compare { grid-template-columns: minmax(0, 1fr); } }
+
+/* Arquitectura */
+.pipeline { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+.node {
+  cursor: pointer; text-align: left; font-family: var(--font-display); color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; display: grid; gap: 6px; min-width: 120px; flex: 1 1 120px;
+}
+.node:hover { border-color: var(--accent); }
+.node[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.node b { font-size: 14.5px; font-weight: 700; }
+.node.static { cursor: default; background: transparent; border-style: dashed; }
+.pipe-arrow { align-self: center; color: var(--muted); font-family: var(--font-mono); }
+.side-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--font-display); font-size: 14px; color: var(--muted); }
+.side-row .node { flex: 0 1 220px; }
+.layer-detail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 28px; }
+.layer-detail ul { margin: 0; padding-left: 18px; font-size: 15.5px; display: grid; gap: 3px; }
+@media (max-width: 680px) { .layer-detail { grid-template-columns: minmax(0, 1fr); } }
+
+/* Laboratorios */
+.lab { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px; display: grid; gap: 18px; min-width: 0; }
+.field-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+label.lbl { font-family: var(--font-display); font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+textarea, input[type="text"] {
+  width: 100%; font-family: var(--font-mono); font-size: 14.5px; color: var(--ink);
+  background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; resize: vertical;
+}
+.presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.presets span { font-family: var(--font-display); font-size: 13px; color: var(--muted); }
+.preset {
+  cursor: pointer; font-family: var(--font-mono); font-size: 12.5px; color: var(--taint);
+  background: var(--taint-bg); border: 1px solid transparent; border-radius: 6px; padding: 3px 8px;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.preset:hover { border-color: var(--taint); }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.steps li { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 14px; padding: 12px 14px; border-top: 1px solid var(--line); align-items: start; }
+.steps li:first-child { border-top: 0; }
+.steps .what { display: grid; gap: 4px; min-width: 0; }
+.steps .what strong { font-family: var(--font-display); font-size: 15px; }
+.steps .what span { font-size: 15px; color: var(--muted); overflow-wrap: anywhere; }
+.steps .chip { justify-content: center; }
+.verdict { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-family: var(--font-display); font-size: 17px; font-weight: 700; }
+.sanitized { display: grid; gap: 8px; }
+.render-box { border: 1px dashed var(--line); border-radius: 8px; padding: 12px 14px; background: var(--bg); }
+.mono-out { font-family: var(--font-mono); font-size: 13.5px; overflow-wrap: anywhere; white-space: pre-wrap; }
+
+.ctx-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-top: 1px solid var(--line); font-size: 14.5px; }
+thead th { border-top: 0; font-family: var(--font-display); font-size: 12.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--code-bg); }
+td .mono-out { font-size: 12.5px; }
+mark.v { background: var(--taint-bg); color: var(--taint); padding: 0 1px; border-radius: 2px; }
+mark.e { background: var(--accent-bg); color: var(--accent); padding: 0 1px; border-radius: 2px; }
+td.ctx b { font-family: var(--font-display); display: block; }
+td.ctx span { font-size: 13px; color: var(--muted); }
+
+/* Catálogo */
+.attack-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; justify-content: space-between; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.codepair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.codepair > div { display: grid; gap: 8px; min-width: 0; align-content: start; }
+.codepair .res { font-size: 14.5px; }
+@media (max-width: 760px) { .codepair { grid-template-columns: minmax(0, 1fr); } }
+
+/* Autoevaluación */
+.quiz { display: grid; gap: 14px; }
+.q { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 12px; }
+.q .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.q .opt { cursor: pointer; font-family: var(--font-display); font-size: 14px; font-weight: 600; border-radius: 6px; padding: 6px 12px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
+.q .opt:hover:not(:disabled) { border-color: var(--accent); }
+.q .opt:disabled { cursor: default; }
+.q .opt.right { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+.q .opt.wrong { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }
+.q .why { font-size: 15.5px; color: var(--muted); }
+.score { font-family: var(--font-display); font-weight: 700; font-variant-numeric: tabular-nums; }
+.reset { cursor: pointer; font-family: var(--font-display); font-size: 14px; background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 6px; padding: 5px 12px; }
+
+/* Referencias */
+.refs { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.refs li { display: grid; gap: 2px; padding-top: 10px; border-top: 1px solid var(--line); }
+.refs li span { font-size: 14.5px; color: var(--muted); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .tab, .node, .opt, .preset, .toc a { transition: border-color .15s, background-color .15s, color .15s; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="toc" aria-label="Índice">
+    <p>Contenido</p>
+    <ol>
+      <li><a href="#regla">Regla central</a></li>
+      <li><a href="#principios">Principios</a></li>
+      <li><a href="#conceptos">Conceptos</a></li>
+      <li><a href="#arquitectura">Arquitectura</a></li>
+      <li><a href="#lab-validacion">Lab: validación</a></li>
+      <li><a href="#lab-encoders">Lab: encoders</a></li>
+      <li><a href="#ataques">Catálogo de ataques</a></li>
+      <li><a href="#autoevaluacion">Autoevaluación</a></li>
+      <li><a href="#referencias">Referencias</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <span class="eyebrow">Unidad 02 · 05 — Marco teórico</span>
+      <h1>Entradas no confiables</h1>
+      <p class="lede">Saneamiento, filtrado y validación de entradas; encoders y mecanismos de mitigación defensiva, ubicados en la arquitectura de un microservicio.</p>
+      <div class="flow" aria-label="Estados del dato">
+        <span class="chip taint">dato no confiable</span><span class="arrow">→</span>
+        <span class="chip trust">validado en la frontera</span><span class="arrow">→</span>
+        <span class="chip trust">parametrizado en el sink</span><span class="arrow">→</span>
+        <span class="chip trust">codificado en la salida</span>
+      </div>
+      <p>Toda entrada es no confiable hasta que cruza una frontera de confianza con controles. Los ejemplos de código salen del proyecto <code>comments-service</code> de esta unidad.</p>
+    </header>
+
+    <section id="regla">
+      <h2>Regla central</h2>
+      <div class="rule">
+        <div>
+          <span class="where">En la entrada</span>
+          <span class="verb">Validar</span>
+          <p>Aceptar solo lo que cumple una allowlist de tipo, longitud, rango y formato. Lo demás se rechaza.</p>
+        </div>
+        <div>
+          <span class="where">En el sink</span>
+          <span class="verb">Parametrizar</span>
+          <p>Mantener el dato fuera del canal de código: parámetros SQL, listas de argumentos, paths confinados.</p>
+        </div>
+        <div>
+          <span class="where">En la salida</span>
+          <span class="verb">Codificar</span>
+          <p>Representar el dato según el contexto donde cae (HTML, atributo, JS, URL, log) para que no se interprete como código.</p>
+        </div>
+      </div>
+      <p class="note"><strong>Sanear</strong> es la excepción: se usa solo cuando el negocio exige aceptar contenido enriquecido (por ejemplo HTML de un editor) y siempre con una allowlist de etiquetas y atributos.</p>
+    </section>
+
+    <section id="principios">
+      <h2>Principios de diseño</h2>
+      <div class="principles">
+        <div><h3>Frontera de confianza</h3><p>Punto donde un dato pasa de un dominio que no controlás a uno que sí. Ahí se valida, siempre del lado del servidor.</p></div>
+        <div><h3>Defensa en profundidad</h3><p>Varias capas independientes. Si el WAF deja pasar un payload, la validación, la parametrización y el encoding siguen protegiendo.</p></div>
+        <div><h3>Confianza cero entre servicios</h3><p>Un mensaje de otro microservicio o de una cola también es entrada. mTLS autentica al emisor, no valida el contenido.</p></div>
+        <div><h3>Fallar cerrado</h3><p>Ante la duda se rechaza. No se intenta "arreglar" la entrada en silencio, porque la corrección puede crear el ataque.</p></div>
+        <div><h3>Allowlist sobre denylist</h3><p>Definir lo permitido es finito. Enumerar lo peligroso nunca termina: siempre hay otra codificación o variante.</p></div>
+        <div><h3>Errores genéricos</h3><p>Responder "host inválido" sin repetir la entrada ni exponer trazas, consultas o rutas internas.</p></div>
+      </div>
+    </section>
+
+    <section id="conceptos">
+      <h2>Conceptos</h2>
+      <p>Seis técnicas que suelen confundirse. Cada una responde una pregunta distinta.</p>
+      <div class="concept-tabs" role="tablist" id="concept-tabs"></div>
+      <div class="panel" id="concept-panel" role="tabpanel"></div>
+
+      <h3>Validación sintáctica y semántica</h3>
+      <div class="compare">
+        <div>
+          <h4>Sintáctica</h4>
+          <p>¿Tiene la forma correcta? Tipo, longitud, formato, charset.</p>
+          <pre>username: ^[a-z0-9_]{3,20}$
+email: máx. 254, formato local@dominio</pre>
+        </div>
+        <div>
+          <h4>Semántica</h4>
+          <p>¿Tiene sentido en el negocio? Se valida en el dominio.</p>
+          <pre>fecha_fin &gt; fecha_inicio
+el usuario es dueño del comentario
+is_admin sale de la sesión, no del body</pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="arquitectura">
+      <h2>¿Dónde va cada control?</h2>
+      <p>Hacé clic en una capa para ver su responsabilidad, los controles, qué amenazas mitiga y dónde está en el proyecto.</p>
+      <div class="pipeline" id="pipeline"></div>
+      <div class="side-row" id="side-row"></div>
+      <div class="panel" id="layer-panel"></div>
+      <p class="note"><strong>Transversal:</strong> librería o middleware de validación compartido entre servicios, contratos OpenAPI o JSON Schema, tests con payloads de ataque, fuzzing y SAST/DAST en el pipeline de CI.</p>
+    </section>
+
+    <section id="lab-validacion">
+      <h2>Laboratorio de validación y saneamiento</h2>
+      <p>Las mismas reglas que <code>app/schemas.py</code> y <code>app/validation.py</code>, ejecutadas en tu navegador. Elegí un campo y probá entradas.</p>
+      <div class="lab">
+        <div class="field-picker" role="tablist" id="field-picker"></div>
+        <div style="display:grid;gap:8px">
+          <label class="lbl" for="val-input" id="val-label">Entrada</label>
+          <textarea id="val-input" rows="2" spellcheck="false"></textarea>
+          <div class="presets" id="val-presets"></div>
+        </div>
+        <div class="verdict" id="val-verdict"></div>
+        <ol class="steps" id="val-steps"></ol>
+        <div class="sanitized" id="val-sanitized" hidden>
+          <h4>Salida sanitizada (DOMPurify con la misma allowlist que nh3)</h4>
+          <div class="mono-out render-box" id="san-code"></div>
+          <h4>Cómo se ve renderizada</h4>
+          <div class="render-box" id="san-render"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="lab-encoders">
+      <h2>Laboratorio de encoders</h2>
+      <p>El mismo valor insertado en cinco contextos. A la izquierda, interpolado crudo; a la derecha, con el encoder de ese contexto (<code>app/encoding.py</code>). Un escape de HTML no protege un string de JavaScript, y viceversa.</p>
+      <div class="lab">
+        <div style="display:grid;gap:8px">
+          <label class="lbl" for="enc-input">Valor no confiable</label>
+          <textarea id="enc-input" rows="2" spellcheck="false"></textarea>
+          <div class="presets" id="enc-presets"></div>
+        </div>
+        <div class="ctx-table-wrap">
+          <table>
+            <thead><tr><th style="width:150px">Contexto</th><th>Interpolado crudo</th><th>Con encoder</th></tr></thead>
+            <tbody id="enc-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="ataques">
+      <h2>Catálogo de ataques</h2>
+      <p>Cada caso existe en el servicio como <code>/vuln/…</code> y <code>/secure/…</code>. El payload es el que usan los tests de <code>tests/test_payloads.py</code>.</p>
+      <div class="concept-tabs" role="tablist" id="attack-tabs"></div>
+      <div class="panel" id="attack-panel"></div>
+    </section>
+
+    <section id="autoevaluacion">
+      <h2>Autoevaluación</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between">
+        <p>Para cada situación, elegí la técnica principal.</p>
+        <div style="display:flex;gap:12px;align-items:center"><span class="score" id="score"></span><button class="reset" id="quiz-reset" type="button">Reiniciar</button></div>
+      </div>
+      <div class="quiz" id="quiz"></div>
+    </section>
+
+    <section id="referencias">
+      <h2>Referencias</h2>
+      <ul class="refs">
+        <li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP Input Validation Cheat Sheet</a><span>Allowlist, validación sintáctica y semántica, canonicalización.</span></li>
+        <li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP Cross Site Scripting Prevention Cheat Sheet</a><span>Output encoding por contexto y saneamiento de HTML.</span></li>
+        <li><a href="https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP SQL Injection Prevention Cheat Sheet</a><span>Consultas parametrizadas como defensa primaria.</span></li>
+        <li><a href="https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP OS Command Injection Defense Cheat Sheet</a><span>Evitar el shell y pasar argumentos estructurados.</span></li>
+        <li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP SSRF Prevention Cheat Sheet</a><span>Allowlist de destinos, bloqueo de IPs internas, redirects.</span></li>
+        <li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP Mass Assignment Cheat Sheet</a><span>DTOs explícitos y campos permitidos.</span></li>
+        <li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP Logging Cheat Sheet</a><span>Neutralizar CR/LF, qué no registrar.</span></li>
+        <li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Microservices_Security_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP Microservices Security Cheat Sheet</a><span>Controles en el borde y en cada servicio, comunicación entre servicios.</span></li>
+        <li><a href="https://owasp.org/www-project-application-security-verification-standard/" target="_blank" rel="noopener">OWASP ASVS</a><span>Requisitos verificables de validación, saneamiento y encoding.</span></li>
+        <li><a href="https://cwe.mitre.org/data/definitions/20.html" target="_blank" rel="noopener">MITRE CWE-20: Improper Input Validation</a><span>Raíz común de las debilidades del catálogo.</span></li>
+      </ul>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  function el(tag, attrs, children) {
+    const node = document.createElement(tag);
+    if (attrs) for (const [k, v] of Object.entries(attrs)) {
+      if (k === "text") node.textContent = v;
+      else if (k === "class") node.className = v;
+      else node.setAttribute(k, v);
+    }
+    (children || []).forEach(c => node.append(c));
+    return node;
+  }
+
+  /* ---------- Conceptos ---------- */
+  const CONCEPTS = [
+    { name: "Validación", q: "¿Este dato tiene la forma que espero?",
+      def: "Comprobar la entrada contra reglas explícitas (tipo, longitud, rango, formato, enum) y rechazarla si no cumple.",
+      ex: "username contra ^[a-z0-9_]{3,20}$; DTO con extra=\"forbid\" que rechaza is_admin.",
+      err: "Usar una denylist de caracteres \"peligrosos\" o validar solo en el frontend.",
+      where: "Frontera del servicio y dominio." },
+    { name: "Canonicalización", q: "¿Estoy validando la misma forma que después voy a usar?",
+      def: "Llevar la entrada a una representación única (Unicode NFKC, decodificar una sola vez) antes de validarla.",
+      ex: "'ａｄｍｉｎ' (ancho completo) se normaliza a 'admin'; '%252e%252e' decodificado dos veces da '..'.",
+      err: "Validar antes de normalizar, o que otra capa decodifique de nuevo después de validar.",
+      where: "Primer paso dentro de la frontera del servicio." },
+    { name: "Filtrado", q: "¿Vale la pena que este request llegue al servicio?",
+      def: "Bloqueo grueso y barato antes de gastar recursos: tamaño, frecuencia, tipo de contenido, firmas conocidas.",
+      ex: "client_max_body_size 16k, 10 req/s por IP, solo application/json, reglas OWASP CRS en el WAF.",
+      err: "Tomar el WAF como la defensa principal: se evade con codificaciones alternativas.",
+      where: "Borde: API gateway o WAF." },
+    { name: "Saneamiento", q: "¿Qué parte de este contenido enriquecido es segura?",
+      def: "Eliminar de un contenido lo que no está en una allowlist, conservando el resto. Es destructivo y específico del formato.",
+      ex: "nh3 o DOMPurify permitiendo <b>, <i>, <a href> con https y mailto; se descartan scripts y on*.",
+      err: "Sanear con expresiones regulares, o sanear datos que deberían validarse y rechazarse.",
+      where: "Salida, solo para campos de texto enriquecido." },
+    { name: "Output encoding", q: "¿Cómo represento este dato para que no se interprete como código aquí?",
+      def: "Transformar caracteres con significado especial en el contexto de destino a su forma literal.",
+      ex: "< pasa a &lt; en HTML, ' pasa a \\u0027 en un string JS, espacio pasa a %20 en una URL.",
+      err: "Un único escape para todos los contextos, o codificar al guardar (doble encoding al mostrar).",
+      where: "Salida: templates, respuestas, logs." },
+    { name: "Parametrización", q: "¿Cómo mantengo el dato fuera del canal de código?",
+      def: "Pasar datos y código por canales separados para que el intérprete nunca los mezcle.",
+      ex: "WHERE author = ? con parámetros; subprocess.run([\"ping\", \"-c\", \"1\", host]) sin shell.",
+      err: "Escapar comillas a mano o armar consultas con f-strings \"porque ya se validó\".",
+      where: "Sinks: base de datos, sistema operativo, intérpretes." },
+  ];
+
+  function renderConcept(i) {
+    const c = CONCEPTS[i];
+    document.querySelectorAll("#concept-tabs .tab").forEach((t, j) => t.setAttribute("aria-selected", String(i === j)));
+    const panel = document.getElementById("concept-panel");
+    panel.replaceChildren(
+      el("p", { class: "question", text: c.q }),
+      el("p", { text: c.def }),
+      el("div", { class: "facts" }, [
+        el("div", {}, [el("h4", { text: "Ejemplo" }), el("p", { text: c.ex })]),
+        el("div", {}, [el("h4", { text: "Error común" }), el("p", { text: c.err })]),
+        el("div", {}, [el("h4", { text: "Dónde va" }), el("p", { text: c.where })]),
+      ])
+    );
+  }
+  const conceptTabs = document.getElementById("concept-tabs");
+  CONCEPTS.forEach((c, i) => {
+    const b = el("button", { class: "tab", role: "tab", type: "button", id: "concept-" + i, text: c.name });
+    b.addEventListener("click", () => renderConcept(i));
+    conceptTabs.append(b);
+  });
+  renderConcept(0);
+
+  /* ---------- Arquitectura ---------- */
+  const LAYERS = {
+    client: { name: "Cliente", state: ["taint", "no confiable"], static: true },
+    edge: { name: "API gateway / WAF", state: ["taint", "no confiable"],
+      role: "Filtrado grueso y barato antes de consumir recursos del servicio. No conoce el dominio.",
+      controls: ["Límite de tamaño de body y headers", "Rate limiting por cliente", "Content-Type permitido (415 si no es JSON)", "Headers de seguridad (nosniff, X-Frame-Options)", "Bloqueo de rutas internas", "Reglas WAF (OWASP CRS)"],
+      threats: ["Payloads gigantes y abuso de recursos", "Fuerza bruta", "Exposición de endpoints internos"],
+      dont: "Asumir que el WAF frena toda inyección o validar reglas de negocio acá.",
+      repo: ["gateway/nginx.conf"] },
+    boundary: { name: "Frontera del servicio", state: ["trust", "validado"],
+      role: "La validación real. Cada servicio valida su propia entrada aunque esté detrás del gateway.",
+      controls: ["Canonicalizar (NFKC, decodificar una vez)", "Schema estricto por allowlist (Pydantic, JSON Schema)", "extra=\"forbid\" y tipos estrictos", "Longitudes y rangos máximos", "Rechazar con 400/422 y mensaje genérico"],
+      threats: ["Mass assignment", "Datos malformados", "Reduce la superficie de inyecciones"],
+      dont: "\"Arreglar\" la entrada en silencio o confiar en la validación del frontend.",
+      repo: ["app/schemas.py", "app/validation.py"] },
+    domain: { name: "Dominio", state: ["trust", "validado"],
+      role: "Validación semántica: reglas de negocio que el schema no puede expresar.",
+      controls: ["Ownership del recurso", "Transiciones de estado válidas", "Privilegios tomados de la sesión, nunca del body"],
+      threats: ["IDOR (acceso a objetos ajenos)", "Escalamiento de privilegios"],
+      dont: "Tomar roles, precios o IDs de dueño desde la entrada del cliente.",
+      repo: ["app/schemas.py (UserCreate sin is_admin)"] },
+    sinks: { name: "Sinks", state: ["trust", "parametrizado"],
+      role: "Donde el dato toca un intérprete. Un dato validado todavía no es seguro para cualquier sink.",
+      controls: ["SQL con parámetros u ORM", "subprocess con lista de argumentos, sin shell", "Paths resueltos y confinados a un directorio base", "HTTP saliente: https, allowlist de hosts, IPs públicas, sin redirects"],
+      threats: ["SQL injection", "Command injection", "Path traversal", "SSRF"],
+      dont: "Concatenar strings en consultas o comandos \"porque ya se validó\".",
+      repo: ["app/routes_secure.py", "app/validation.py", "app/db.py"] },
+    output: { name: "Salida (respuesta)", state: ["trust", "codificado"],
+      role: "Representar el dato según el contexto donde se inserta.",
+      controls: ["Templates con autoescape", "Encoder por contexto: HTML, atributo, JS, URL", "Saneamiento con allowlist para texto enriquecido", "CSP con nonce, nosniff, Content-Type correcto"],
+      threats: ["XSS reflejado y almacenado", "Inyección en contexto JavaScript"],
+      dont: "Usar |safe sobre datos del usuario o codificar al guardar en la base.",
+      repo: ["app/encoding.py", "app/sanitize.py", "app/main.py", "app/templates/"] },
+    logs: { name: "Logs", state: ["trust", "codificado"],
+      role: "Los logs también son un sink: otro sistema los parsea y una persona los lee.",
+      controls: ["Logging estructurado (JSON)", "Neutralizar CR/LF", "No registrar secretos ni datos personales"],
+      threats: ["Log injection y falsificación de eventos", "Fuga de datos sensibles"],
+      dont: "Escribir la entrada cruda en un log de texto plano.",
+      repo: ["app/logging_conf.py"] },
+    peers: { name: "Otros servicios / colas", state: ["taint", "no confiable"],
+      role: "Entrada que llega por la red interna. Se trata igual que la del cliente.",
+      controls: ["Validar con schemas compartidos (OpenAPI, JSON Schema, Avro o Protobuf con schema registry)", "Autenticar con mTLS o tokens de servicio", "Versionar contratos"],
+      threats: ["Propagación lateral de payloads", "Eventos envenenados", "Servicio comprometido que ataca a otros"],
+      dont: "Saltear la validación porque el emisor es \"interno\".",
+      repo: ["Nota de diseño (README)"] },
+  };
+  const FLOW = ["client", "edge", "boundary", "domain", "sinks"];
+
+  function layerButton(key) {
+    const l = LAYERS[key];
+    const b = el("button", { class: "node" + (l.static ? " static" : ""), type: "button", "aria-pressed": "false" }, [
+      el("b", { text: l.name }),
+      el("span", { class: "chip " + l.state[0], text: l.state[1] }),
+    ]);
+    b.dataset.key = key;
+    if (l.static) b.disabled = true;
+    else b.addEventListener("click", () => renderLayer(key));
+    return b;
+  }
+  const pipeline = document.getElementById("pipeline");
+  FLOW.forEach((k, i) => {
+    if (i) pipeline.append(el("span", { class: "pipe-arrow", "aria-hidden": "true", text: "→" }));
+    pipeline.append(layerButton(k));
+  });
+  const side = document.getElementById("side-row");
+  side.append(el("span", { text: "También entra por la frontera:" }), layerButton("peers"),
+              el("span", { text: "Sale hacia:" }), layerButton("output"), layerButton("logs"));
+
+  function list(items) { return el("ul", {}, items.map(t => el("li", { text: t }))); }
+  function renderLayer(key) {
+    const l = LAYERS[key];
+    document.querySelectorAll(".node").forEach(n => n.setAttribute("aria-pressed", String(n.dataset.key === key)));
+    document.getElementById("layer-panel").replaceChildren(
+      el("div", { class: "attack-head" }, [el("h3", { text: l.name }), el("span", { class: "chip " + l.state[0], text: "estado del dato: " + l.state[1] })]),
+      el("p", { text: l.role }),
+      el("div", { class: "layer-detail" }, [
+        el("div", {}, [el("h4", { text: "Controles" }), list(l.controls)]),
+        el("div", {}, [el("h4", { text: "Mitiga" }), list(l.threats)]),
+        el("div", {}, [el("h4", { text: "Qué no hacer" }), el("p", { text: l.dont })]),
+        el("div", {}, [el("h4", { text: "En el proyecto" }), el("ul", {}, l.repo.map(r => el("li", {}, [el("code", { text: r })])))]),
+      ])
+    );
+  }
+  renderLayer("boundary");
+
+  /* ---------- Laboratorio de validación ---------- */
+  const CTRL = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/;
+  const USERNAME = /^[a-z0-9_]{3,20}$/;
+  const FILENAME = /^[A-Za-z0-9_-]{1,64}\.(txt|png|pdf)$/;
+  const HOSTNAME = /^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i;
+  const IPV4 = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
+  const AVATAR_HOSTS = ["avatars.githubusercontent.com", "www.gravatar.com"];
+
+  function canonicalStep(raw, steps) {
+    const norm = raw.normalize("NFKC");
+    steps.push({ ok: true, info: norm === raw, title: "Canonicalizar (NFKC)",
+      detail: norm === raw ? "Sin cambios." : "Se normalizó a: " + JSON.stringify(norm) });
+    if (CTRL.test(norm)) { steps.push({ ok: false, title: "Caracteres de control", detail: "Contiene caracteres de control (solo se permiten salto de línea y tab)." }); return null; }
+    steps.push({ ok: true, title: "Caracteres de control", detail: "No hay." });
+    return norm;
+  }
+
+  const FIELDS = {
+    username: { name: "Usuario", file: "schemas.Username",
+      presets: ["alice", "ａｄｍｉｎ", "Admin", "bob' OR 1=1--", "al"],
+      run(raw, steps) {
+        let v = canonicalStep(raw, steps); if (v === null) return false;
+        v = v.trim();
+        const ok = USERNAME.test(v);
+        steps.push({ ok, title: "Allowlist ^[a-z0-9_]{3,20}$", detail: ok ? "Cumple el patrón." : "Solo minúsculas, dígitos y _, entre 3 y 20 caracteres." });
+        return ok;
+      } },
+    filename: { name: "Nombre de archivo", file: "validation.safe_path",
+      presets: ["report.txt", "../secret.txt", "..%2Fsecret.txt", "/etc/passwd", "report.txt.exe"],
+      run(v, steps) {
+        const ok = FILENAME.test(v);
+        let why = "Nombre simple con extensión txt, png o pdf.";
+        if (!ok && (v.includes("..") || v.includes("/") || v.includes("\\") || /%2e|%2f/i.test(v))) why = "Intento de path traversal: no se permiten separadores ni '..'.";
+        steps.push({ ok, title: "Allowlist de nombre", detail: ok ? "Cumple el patrón." : why });
+        if (!ok) return false;
+        steps.push({ ok: true, title: "Path resuelto dentro de la base", detail: "data/files/" + v + " → resolve() sigue dentro de data/files." });
+        return true;
+      } },
+    host: { name: "Host para ping", file: "validation.validate_host",
+      presets: ["8.8.8.8", "example.com", "127.0.0.1; id", "$(whoami).example.com", "-f"],
+      run(v, steps) {
+        let kind = null;
+        if (IPV4.test(v)) kind = "IPv4";
+        else if (v.includes(":")) { try { new URL("http://[" + v + "]/"); kind = "IPv6"; } catch (e) { /* no es IPv6 */ } }
+        if (kind) steps.push({ ok: true, title: "IP literal", detail: "Es una dirección " + kind + " válida." });
+        else {
+          const ok = HOSTNAME.test(v);
+          let why = "No es una IP ni un hostname RFC 1123.";
+          if (/[;&|`$()<>]/.test(v)) why = "Contiene metacaracteres de shell: intento de command injection.";
+          else if (v.startsWith("-")) why = "Empieza con '-': se interpretaría como una opción de ping (argument injection).";
+          steps.push({ ok, title: "Hostname RFC 1123", detail: ok ? "Hostname válido." : why });
+          if (!ok) return false;
+        }
+        steps.push({ ok: true, title: "Ejecución sin shell", detail: JSON.stringify(["ping", "-c", "1", v]) });
+        return true;
+      } },
+    url: { name: "URL de avatar", file: "validation.validate_outbound_url",
+      presets: ["https://www.gravatar.com/avatar/abc", "http://169.254.169.254/latest/meta-data/", "https://user:pass@www.gravatar.com/", "https://www.gravatar.com:8443/x", "https://evil.example/a.png", "file:///etc/passwd"],
+      run(v, steps) {
+        if (v.length > 2048) { steps.push({ ok: false, title: "Longitud", detail: "Más de 2048 caracteres." }); return false; }
+        let u;
+        try { u = new URL(v); } catch (e) { steps.push({ ok: false, title: "Parseo", detail: "No es una URL absoluta válida." }); return false; }
+        const checks = [
+          [u.protocol === "https:", "Esquema https", "Esquema " + u.protocol + " no permitido."],
+          [!u.username && !u.password, "Sin credenciales en la URL", "La URL incluye usuario o contraseña."],
+          [AVATAR_HOSTS.includes(u.hostname), "Host en allowlist", "El host " + u.hostname + " no está en la allowlist."],
+          [u.port === "" || u.port === "443", "Puerto por defecto", "Puerto " + u.port + " no permitido."],
+        ];
+        for (const [ok, title, bad] of checks) {
+          steps.push({ ok, title, detail: ok ? "OK." : bad });
+          if (!ok) return false;
+        }
+        steps.push({ ok: true, info: true, title: "Resolución DNS", detail: "En el servidor se verifica que todas las IPs resueltas sean públicas y no se siguen redirects." });
+        return true;
+      } },
+    comment: { name: "Comentario (HTML)", file: "schemas.CommentIn + sanitize.py",
+      presets: ["Hola <b>mundo</b>", "<img src=x onerror=alert(1)>", "<a href=\"javascript:alert(1)\">clic</a>", "<p onclick=\"robar()\">texto</p><script>alert(1)<\/script>"],
+      run(raw, steps) {
+        const v = canonicalStep(raw, steps); if (v === null) return false;
+        if (v.length > 2000) { steps.push({ ok: false, title: "Longitud", detail: "Más de 2000 caracteres." }); return false; }
+        if (!v.trim()) { steps.push({ ok: false, title: "No vacío", detail: "El comentario está vacío." }); return false; }
+        steps.push({ ok: true, title: "Longitud y contenido", detail: "Hasta 2000 caracteres, no vacío. El HTML se acepta y se sanea en la salida." });
+        return true;
+      } },
+  };
+  let currentField = "username";
+  const SAN_CONFIG = {
+    ALLOWED_TAGS: ["b", "i", "em", "strong", "p", "br", "ul", "ol", "li", "a", "code"],
+    ALLOWED_ATTR: ["href", "title"],
+    ALLOWED_URI_REGEXP: /^(?:https|mailto):/i,
+  };
+
+  const picker = document.getElementById("field-picker");
+  const valInput = document.getElementById("val-input");
+  Object.entries(FIELDS).forEach(([key, f]) => {
+    const b = el("button", { class: "tab", role: "tab", type: "button", id: "field-" + key, text: f.name });
+    b.addEventListener("click", () => { currentField = key; valInput.value = f.presets[0]; renderField(); });
+    picker.append(b);
+  });
+
+  function renderField() {
+    const f = FIELDS[currentField];
+    picker.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t.id === "field-" + currentField)));
+    document.getElementById("val-label").textContent = "Entrada — " + f.file;
+    const presets = document.getElementById("val-presets");
+    presets.replaceChildren(el("span", { text: "Probar:" }));
+    f.presets.forEach(p => {
+      const b = el("button", { class: "preset", type: "button", title: p, text: p });
+      b.addEventListener("click", () => { valInput.value = p; runValidation(); });
+      presets.append(b);
+    });
+    runValidation();
+  }
+
+  function runValidation() {
+    const steps = [];
+    const ok = FIELDS[currentField].run(valInput.value, steps);
+    document.getElementById("val-verdict").replaceChildren(
+      el("span", { class: "chip " + (ok ? "ok" : "bad"), text: ok ? "aceptado" : "rechazado" }),
+      el("span", { text: ok ? "La entrada cruza la frontera." : "Respuesta 400/422 con mensaje genérico." })
+    );
+    document.getElementById("val-steps").replaceChildren(...steps.map(s => el("li", {}, [
+      el("span", { class: "chip " + (s.info ? "trust" : s.ok ? "ok" : "bad"), text: s.info ? "info" : s.ok ? "pasa" : "falla" }),
+      el("div", { class: "what" }, [el("strong", { text: s.title }), el("span", { text: s.detail })]),
+    ])));
+    const sanBox = document.getElementById("val-sanitized");
+    sanBox.hidden = !(currentField === "comment" && ok);
+    if (!sanBox.hidden) {
+      const code = document.getElementById("san-code");
+      const render = document.getElementById("san-render");
+      if (window.DOMPurify) {
+        const clean = window.DOMPurify.sanitize(valInput.value.normalize("NFKC"), SAN_CONFIG);
+        code.textContent = clean || "(vacío)";
+        render.innerHTML = clean; // seguro: salida de DOMPurify con allowlist
+      } else {
+        code.textContent = "No se pudo cargar DOMPurify; el saneamiento no está disponible en esta vista.";
+        render.textContent = "";
+      }
+    }
+  }
+  valInput.addEventListener("input", runValidation);
+  valInput.value = FIELDS.username.presets[0];
+  renderField();
+
+  /* ---------- Laboratorio de encoders ---------- */
+  const ENC = {
+    html: s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&#34;").replace(/'/g, "&#39;"),
+    js: s => JSON.stringify(s).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026").replace(/'/g, "\\u0027").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029"),
+    url: s => encodeURIComponent(s).replace(/[!'()*]/g, c => "%" + c.charCodeAt(0).toString(16).toUpperCase()),
+    log: s => s.replace(/\r/g, "\\r").replace(/\n/g, "\\n"),
+  };
+  const CONTEXTS = [
+    { name: "Cuerpo HTML", fn: "encoding.html", pre: "<p>", post: "</p>", rawPre: "<p>", enc: ENC.html,
+      breaks: s => /[<&]/.test(s), why: "abre etiquetas" },
+    { name: "Atributo HTML", fn: "encoding.html", pre: "<li title=\"", post: "\">", enc: ENC.html,
+      breaks: s => /["<&]/.test(s), why: "cierra la comilla del atributo" },
+    { name: "String JS", fn: "encoding.js_string", pre: "const q = '", post: "';", encPre: "const q = ", encPost: ";", enc: ENC.js,
+      breaks: s => /['\\\n\r]|<\/script/i.test(s), why: "cierra el string o el <script>" },
+    { name: "Parámetro de URL", fn: "encoding.url_component", pre: "/search?q=", post: "&page=1", enc: ENC.url,
+      breaks: s => /[&#=?\/\s%+]/.test(s), why: "agrega o corta parámetros" },
+    { name: "Línea de log", fn: "encoding.log_value", pre: "login failed for user ", post: "", enc: ENC.log,
+      breaks: s => /[\r\n]/.test(s), why: "falsifica una nueva línea" },
+  ];
+  const encInput = document.getElementById("enc-input");
+  const ENC_PRESETS = ["<img src=x onerror=alert(1)>", "\" onmouseover=\"alert(1)", "';alert(document.cookie);//", "<\/script><script>alert(1)<\/script>", "a&b=c d", "bob\n2026-10-30 INFO login ok user admin"];
+  const encPresets = document.getElementById("enc-presets");
+  encPresets.append(el("span", { text: "Probar:" }));
+  ENC_PRESETS.forEach(p => {
+    const b = el("button", { class: "preset", type: "button", title: p, text: p.replace(/\n/g, "\\n") });
+    b.addEventListener("click", () => { encInput.value = p; renderEncoders(); });
+    encPresets.append(b);
+  });
+
+  function snippet(pre, value, post, markClass) {
+    return el("div", { class: "mono-out" }, [document.createTextNode(pre), el("mark", { class: markClass, text: value }), document.createTextNode(post)]);
+  }
+  function renderEncoders() {
+    const v = encInput.value;
+    document.getElementById("enc-body").replaceChildren(...CONTEXTS.map(c => {
+      const broken = c.breaks(v);
+      return el("tr", {}, [
+        el("td", { class: "ctx" }, [el("b", { text: c.name }), el("span", { class: "mono", text: c.fn })]),
+        el("td", {}, [
+          snippet(c.pre, v, c.post, "v"),
+          el("div", { style: "margin-top:6px" }, [el("span", { class: "chip " + (broken ? "bad" : "ok"), text: broken ? "rompe el contexto: " + c.why : "inerte en este caso" })]),
+        ]),
+        el("td", {}, [
+          snippet(c.encPre ?? c.pre, c.enc(v), c.encPost ?? c.post, "e"),
+          el("div", { style: "margin-top:6px" }, [el("span", { class: "chip ok", text: "se interpreta como dato" })]),
+        ]),
+      ]);
+    }));
+  }
+  encInput.addEventListener("input", renderEncoders);
+  encInput.value = ENC_PRESETS[0];
+  renderEncoders();
+
+  /* ---------- Catálogo de ataques ---------- */
+  const ATTACKS = [
+    { name: "SQL injection", cwe: "CWE-89", layer: "Sinks + frontera", route: "GET /comments/search",
+      payload: "x' UNION SELECT id, username, password_hash FROM users--",
+      vuln: "conn.execute(\n  f\"SELECT id, author, body FROM comments \"\n  f\"WHERE author = '{author}'\"\n)",
+      secure: "author: Annotated[str, Query(pattern=USERNAME_PATTERN)]\n\nconn.execute(\n  \"SELECT id, author, body FROM comments WHERE author = ?\",\n  (author,),\n)",
+      vres: "Devuelve los hashes de contraseñas de la tabla users.", sres: "422: no cumple el patrón. Aunque pasara, el parámetro nunca se interpreta como SQL.",
+      why: "La comilla cierra el literal y UNION agrega una consulta del atacante. La parametrización separa datos de código; la validación reduce la superficie." },
+    { name: "XSS almacenado", cwe: "CWE-79", layer: "Salida", route: "POST/GET /comments",
+      payload: "<img src=x onerror=alert(2)>",
+      vuln: "Environment(autoescape=False)\n\n<strong>{{ c.author }}</strong>: {{ c.body }}",
+      secure: "Environment(autoescape=select_autoescape([\"html\"]))\nbody_html = sanitize_html(r[\"body\"])  # nh3\n\n<strong>{{ c.author }}</strong>: {{ c.body_html | safe }}\n+ CSP: script-src 'nonce-…'",
+      vres: "El navegador ejecuta onerror para cada visitante.", sres: "author se escapa (&lt;script&gt;), body se sanea y se descarta onerror; la CSP bloquea scripts sin nonce.",
+      why: "El dato se guardó una vez y se ejecuta en cada render. Se sanea en la salida para cubrir también filas viejas." },
+    { name: "Inyección en JS", cwe: "CWE-79", layer: "Salida", route: "GET /comments?filter=",
+      payload: "';alert(document.cookie);//",
+      vuln: "<script>\n  const currentFilter = '{{ filter }}';\n<\/script>",
+      secure: "<script nonce=\"{{ nonce }}\">\n  const currentFilter = {{ filter | tojson }};\n<\/script>",
+      vres: "La comilla cierra el string y alert se ejecuta.", sres: "tojson produce un literal JSON con ' como \\u0027.",
+      why: "El escape de HTML no sirve dentro de un <script>: hace falta el encoder del contexto JavaScript." },
+    { name: "Mass assignment", cwe: "CWE-915", layer: "Frontera + dominio", route: "POST /users",
+      payload: "{\"username\": \"mallory\", \"email\": \"m@example.test\", \"is_admin\": 1}",
+      vuln: "columns = \", \".join(payload)\nconn.execute(f\"INSERT INTO users ({columns}) VALUES (...)\", ...)",
+      secure: "class UserCreate(StrictModel):  # extra=\"forbid\"\n    username: Username\n    email: Email",
+      vres: "Crea un usuario con is_admin = 1.", sres: "422: campo extra no permitido.",
+      why: "El cliente no debe poder fijar campos que no le corresponden. El DTO define exactamente qué se acepta." },
+    { name: "Path traversal", cwe: "CWE-22", layer: "Sinks", route: "GET /files?name=",
+      payload: "../secret.txt",
+      vuln: "open(os.path.join(FILES_DIR, name))",
+      secure: "if not SAFE_FILENAME.fullmatch(name): raise ValueError\npath = (base / name).resolve()\nif not path.is_relative_to(base): raise ValueError",
+      vres: "Devuelve data/secret.txt.", sres: "400: nombre inválido.",
+      why: "../ sale del directorio base. Se valida el nombre y además se confirma el path ya resuelto." },
+    { name: "Command injection", cwe: "CWE-78", layer: "Sinks", route: "GET /ping?host=",
+      payload: "127.0.0.1;id",
+      vuln: "subprocess.run(f\"ping -c 1 {host}\", shell=True)",
+      secure: "host = validate_host(host)  # IP o hostname RFC 1123\nsubprocess.run([\"ping\", \"-c\", \"1\", host])",
+      vres: "Ejecuta id dentro del contenedor.", sres: "400: host inválido. Sin shell, ; no tiene significado.",
+      why: "Con shell=True el ; separa comandos. Una lista de argumentos evita el shell; la validación además impide opciones como -f." },
+    { name: "SSRF", cwe: "CWE-918", layer: "Sinks", route: "POST /avatar",
+      payload: "{\"url\": \"http://127.0.0.1:8000/internal/config\"}",
+      vuln: "net.http_get(payload[\"url\"], follow_redirects=True)\nreturn {\"content\": response.text[:500]}",
+      secure: "url = validate_outbound_url(payload.url)\n# https, host en allowlist, IPs públicas\nnet.http_get(url, follow_redirects=False)\n# solo metadatos, nunca el body",
+      vres: "El servicio lee su propio endpoint interno, que el gateway bloqueaba desde afuera.", sres: "400: url no permitida.",
+      why: "El servidor hace el request con su posición de red. El gateway no ve este tráfico porque sale desde adentro." },
+    { name: "Log injection", cwe: "CWE-117", layer: "Logs", route: "POST /login",
+      payload: "bob\\n2026-10-30 INFO login succeeded for user admin",
+      vuln: "line = f\"login failed for user {payload['username']}\"\nlogger.info(line)",
+      secure: "log_event(\"login_failed\", username=payload.username)\n# JSON en una línea, \\r y \\n escapados",
+      vres: "El log muestra un login exitoso de admin que nunca ocurrió.", sres: "Una sola línea JSON con \\n literal.",
+      why: "Quien lee o parsea el log confía en que cada línea es un evento. El encoding de logs preserva esa estructura." },
+  ];
+  const attackTabs = document.getElementById("attack-tabs");
+  function renderAttack(i) {
+    const a = ATTACKS[i];
+    attackTabs.querySelectorAll(".tab").forEach((t, j) => t.setAttribute("aria-selected", String(i === j)));
+    document.getElementById("attack-panel").replaceChildren(
+      el("div", { class: "attack-head" }, [
+        el("h3", { text: a.name }),
+        el("div", { class: "meta" }, [el("span", { class: "chip trust", text: a.cwe }), el("span", { class: "chip trust", text: a.layer }), el("span", { class: "chip trust", text: a.route })]),
+      ]),
+      el("div", { style: "display:grid;gap:6px" }, [el("h4", { text: "Payload" }), el("pre", {}, [el("span", { style: "color:var(--taint)", text: a.payload })])]),
+      el("div", { class: "codepair" }, [
+        el("div", {}, [el("h4", { text: "/vuln" }), el("pre", { text: a.vuln }), el("span", { class: "chip bad", text: "ataque exitoso" }), el("p", { class: "res", text: a.vres })]),
+        el("div", {}, [el("h4", { text: "/secure" }), el("pre", { text: a.secure }), el("span", { class: "chip ok", text: "bloqueado" }), el("p", { class: "res", text: a.sres })]),
+      ]),
+      el("p", { text: a.why })
+    );
+  }
+  ATTACKS.forEach((a, i) => {
+    const b = el("button", { class: "tab", role: "tab", type: "button", id: "attack-" + i, text: a.name });
+    b.addEventListener("click", () => renderAttack(i));
+    attackTabs.append(b);
+  });
+  renderAttack(0);
+
+  /* ---------- Autoevaluación ---------- */
+  const OPTIONS = ["Validar", "Sanear", "Codificar", "Parametrizar", "Filtrar"];
+  const QUESTIONS = [
+    { q: "El nombre que ingresa un usuario se muestra dentro de un <p> en una página.", a: "Codificar",
+      why: "Es texto plano que se inserta en HTML: encoding de HTML en la salida (autoescape)." },
+    { q: "Un campo edad recibe \"25; DROP TABLE users\".", a: "Validar",
+      why: "Se espera un entero en un rango: tipo estricto y límites, y se rechaza lo demás." },
+    { q: "Un editor de comentarios permite negritas y links.", a: "Sanear",
+      why: "Hay que aceptar HTML: allowlist de etiquetas y atributos (nh3, DOMPurify)." },
+    { q: "Una búsqueda por autor arma una consulta SQL.", a: "Parametrizar",
+      why: "Consulta con parámetros: el valor nunca se interpreta como SQL." },
+    { q: "Un microservicio consume eventos que publica otro servicio interno en una cola.", a: "Validar",
+      why: "Confianza cero: el mensaje se valida con el schema del contrato como cualquier entrada." },
+    { q: "Un valor del usuario se asigna a una variable dentro de un <script>.", a: "Codificar",
+      why: "Contexto JavaScript: encoder de string JS (|tojson), no el escape de HTML." },
+    { q: "Se ejecuta ping con el host que envía el cliente.", a: "Parametrizar",
+      why: "Lista de argumentos sin shell; además se valida el host para evitar opciones como -f." },
+    { q: "Llegan requests de 5 MB a un endpoint que espera 200 bytes.", a: "Filtrar",
+      why: "Límite de tamaño en el gateway, antes de que el request consuma recursos del servicio." },
+  ];
+  const answered = new Map();
+  function renderScore() {
+    const right = [...answered.values()].filter(Boolean).length;
+    document.getElementById("score").textContent = right + " / " + QUESTIONS.length + " correctas";
+  }
+  function renderQuiz() {
+    answered.clear();
+    document.getElementById("quiz").replaceChildren(...QUESTIONS.map((item, qi) => {
+      const why = el("p", { class: "why", hidden: "" });
+      const opts = el("div", { class: "opts" });
+      OPTIONS.forEach(o => {
+        const b = el("button", { class: "opt", type: "button", text: o });
+        b.addEventListener("click", () => {
+          if (answered.has(qi)) return;
+          const correct = o === item.a;
+          answered.set(qi, correct);
+          opts.querySelectorAll(".opt").forEach(x => {
+            x.disabled = true;
+            if (x.textContent === item.a) x.classList.add("right");
+          });
+          if (!correct) b.classList.add("wrong");
+          why.textContent = (correct ? "Correcto. " : "Respuesta: " + item.a + ". ") + item.why;
+          why.hidden = false;
+          renderScore();
+        });
+        opts.append(b);
+      });
+      return el("div", { class: "q" }, [el("p", { text: item.q }), opts, why]);
+    }));
+    renderScore();
+  }
+  document.getElementById("quiz-reset").addEventListener("click", renderQuiz);
+  renderQuiz();
+
+  /* ---------- Índice activo ---------- */
+  const links = [...document.querySelectorAll(".toc a")];
+  const sections = links.map(a => document.querySelector(a.getAttribute("href")));
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) links.forEach(a => a.classList.toggle("active", a.getAttribute("href") === "#" + e.target.id));
+      });
+    }, { rootMargin: "-20% 0px -70% 0px" });
+    sections.forEach(s => s && io.observe(s));
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Comments (secure)</title></head>
+<body>
+  <h1>Comments (secure)</h1>
+  <ul>
+  {% for c in comments %}
+    {# author: texto plano, con autoescape. body_html: ya sanitizado por nh3. #}
+    <li title="{{ c.author }}"><strong>{{ c.author }}</strong>: {{ c.body_html | safe }}</li>
+  {% endfor %}
+  </ul>
+  <script nonce="{{ nonce }}">
+    const currentFilter = {{ filter | tojson }};
+  </script>
+</body>
+</html>

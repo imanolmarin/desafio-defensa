@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Comments (vulnerable)</title></head>
+<body>
+  <h1>Comments (vulnerable)</h1>
+  <ul>
+  {% for c in comments %}
+    <li title="{{ c.author }}"><strong>{{ c.author }}</strong>: {{ c.body }}</li>
+  {% endfor %}
+  </ul>
+  <script>
+    const currentFilter = '{{ filter }}';
+  </script>
+</body>
+</html>

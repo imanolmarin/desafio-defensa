@@ -1,0 +1,17 @@
+services:
+  gateway:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./front:/usr/share/nginx/html/app:ro
+    ports:
+      # Solo en localhost: los endpoints /vuln son explotables a propósito.
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - comments-service
+
+  comments-service:
+    build: ./comments-service
+    # Sin puertos publicados: solo accesible por el gateway (o por SSRF desde adentro).
+    expose:
+      - "8000"

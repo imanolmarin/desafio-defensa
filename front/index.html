@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comentarios</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Comentarios</h1>
+      <p id="filter-info" class="filter-info"></p>
+    </header>
+
+    <form id="comment-form" novalidate>
+      <div class="field">
+        <label for="author">Usuario</label>
+        <!-- Mismas reglas que el backend (schemas.Username), solo para dar feedback rápido. -->
+        <input id="author" name="author" type="text" required pattern="[a-z0-9_]{3,20}" maxlength="20" autocomplete="username">
+        <small>3 a 20 caracteres: minúsculas, números o _</small>
+      </div>
+      <div class="field">
+        <label for="body">Comentario</label>
+        <textarea id="body" name="body" rows="3" required maxlength="2000"></textarea>
+        <small>Podés usar &lt;b&gt;, &lt;i&gt; y links.</small>
+      </div>
+      <button type="submit">Publicar</button>
+      <p id="status" class="status" role="status"></p>
+    </form>
+
+    <ul id="comments" class="comments"></ul>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

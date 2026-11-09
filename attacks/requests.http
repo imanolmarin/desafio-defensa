@@ -1,0 +1,78 @@
+# Payloads para la demo. Se ejecutan con REST Client de VS Code / cliente HTTP de JetBrains,
+# o copiándolos como comandos curl. Cambiá /vuln por /secure para comparar.
+@base = http://localhost:8080
+
+### SQL injection: extraer hashes de contraseñas con UNION
+GET {{base}}/vuln/comments/search?author=x'%20UNION%20SELECT%20id,%20username,%20password_hash%20FROM%20users--
+
+### Mismo payload, ruta segura -> 422
+GET {{base}}/secure/comments/search?author=x'%20UNION%20SELECT%20id,%20username,%20password_hash%20FROM%20users--
+
+### XSS almacenado: guardar un payload y abrir /vuln/comments y /secure/comments en el navegador
+POST {{base}}/vuln/comments
+Content-Type: application/json
+
+{"author": "<script>alert('author')</script>", "body": "<img src=x onerror=alert('body')>"}
+
+### Inyección en contexto JS (abrir en el navegador)
+GET {{base}}/vuln/comments?filter=';alert(document.domain);//
+
+### Mass assignment: volverse admin
+POST {{base}}/vuln/users
+Content-Type: application/json
+
+{"username": "mallory", "email": "m@example.test", "is_admin": 1}
+
+### Mass assignment, ruta segura -> 422 (campo extra prohibido)
+POST {{base}}/secure/users
+Content-Type: application/json
+
+{"username": "mallory", "email": "m@example.test", "is_admin": 1}
+
+### Path traversal
+GET {{base}}/vuln/files?name=../secret.txt
+
+### Path traversal, ruta segura -> 400
+GET {{base}}/secure/files?name=../secret.txt
+
+### Command injection
+GET {{base}}/vuln/ping?host=127.0.0.1;id
+
+### Command injection, ruta segura -> 400
+GET {{base}}/secure/ping?host=127.0.0.1;id
+
+### El acceso directo al endpoint interno lo bloquea el gateway -> 404
+GET {{base}}/internal/config
+
+### SSRF: el servicio pide su propio endpoint interno por nosotros
+POST {{base}}/vuln/avatar
+Content-Type: application/json
+
+{"url": "http://127.0.0.1:8000/internal/config"}
+
+### SSRF, ruta segura -> 400
+POST {{base}}/secure/avatar
+Content-Type: application/json
+
+{"url": "http://127.0.0.1:8000/internal/config"}
+
+### Log injection: falsificar una segunda línea de log (ver `docker compose logs comments-service`)
+POST {{base}}/vuln/login
+Content-Type: application/json
+
+{"username": "bob\n2026-10-30 INFO login succeeded for user admin"}
+
+### Log injection, ruta segura: una sola línea JSON
+POST {{base}}/secure/login
+Content-Type: application/json
+
+{"username": "bob\n2026-10-30 INFO login succeeded for user admin"}
+
+### Encoders: un valor, todos los contextos de salida
+GET {{base}}/secure/encode?value=%3Cimg%20src%3Dx%20onerror%3D'alert(1)'%3E
+
+### Gateway: content type incorrecto -> 415
+POST {{base}}/secure/comments
+Content-Type: text/plain
+
+hello
