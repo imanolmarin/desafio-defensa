@@ -61,6 +61,14 @@ otros servicios / colas ──► misma validación por schema (confianza cero e
 | Log injection (`POST /login`) | entrada cruda en un log de texto | línea de log JSON, CR/LF escapados |
 | Encoders (`GET /secure/encode`) | — | el mismo valor codificado para html, js, url, log |
 
+## Resolución
+
+- Etapa 1 y 2 resueltas: [`RESPUESTAS.md`](RESPUESTAS.md), [`ARQUITECTURA.md`](ARQUITECTURA.md), [`CERTIFICADOS.md`](CERTIFICADOS.md), [`BONUS.md`](BONUS.md).
+- Evidencia (capturas y CSV exportados): [`evidencia/`](evidencia/).
+- Scripts de ataque y pruebas: `attacks/blind_order_by.py`, `attacks/mtls_tests.sh`, `attacks/redos_check.py`.
+
+> **Antes del primer `docker compose up`** hay que generar la PKI en `certs/` siguiendo [`CERTIFICADOS.md`](CERTIFICADOS.md) (las claves no están en el repo).
+
 ## Ejecutar
 
 ```bash
@@ -76,7 +84,11 @@ Payloads listos para enviar: `attacks/requests.http`.
 ```bash
 cd comments-service
 uv venv -p 3.12 .venv && uv pip install -p .venv -r requirements-dev.txt
-.venv/bin/pytest -q
+.venv/bin/pytest -q          # 107 tests
+
+cd ../moderation-service
+uv venv -p 3.12 .venv && uv pip install -p .venv -r requirements-dev.txt
+.venv/bin/pytest -q          # 24 tests
 ```
 
 Cada test muestra el ataque funcionando contra `/vuln` y bloqueado o neutralizado por `/secure`.

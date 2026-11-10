@@ -1,3 +1,4 @@
-fastapi
-uvicorn[standard]
-pydantic>=2
+fastapi==0.162.2
+# Fijado: app/server.py extiende uvicorn.protocols.http.h11_impl.H11Protocol
+uvicorn[standard]==0.54.0
+pydantic==2.14.3
