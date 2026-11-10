@@ -6,10 +6,10 @@ import subprocess
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from . import encoding, net
+from . import encoding, moderation_client, net
 from .db import get_conn
 from .logging_conf import log_event
 from .paths import FILES_DIR, TEMPLATES_DIR
@@ -29,7 +29,9 @@ def bad_request(message: str) -> HTTPException:
 @router.get("/comments/search")
 def search_comments(author: Annotated[str, Query(pattern=USERNAME_PATTERN)]):
     with get_conn() as conn:
-        rows = conn.execute("SELECT id, author, body FROM comments WHERE author = ?", (author,)).fetchall()
+        rows = conn.execute(
+            "SELECT id, author, body FROM comments WHERE author = ? AND status = 'approved'", (author,)
+        ).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -50,7 +52,7 @@ def sorted_comments(
         raise HTTPException(status_code=422, detail="direction must be asc or desc")
     column = SORT_COLUMNS[sort]
     # id como segundo criterio: orden estable cuando hay autores repetidos.
-    sql = f"SELECT id, author, body FROM comments ORDER BY {column} {order}, id {order}"  # nosec B608 - fragmentos de allowlist
+    sql = f"SELECT id, author, body FROM comments WHERE status = 'approved' ORDER BY {column} {order}, id {order}"  # nosec B608 - fragmentos de allowlist
     with get_conn() as conn:
         rows = conn.execute(sql).fetchall()
     return [dict(r) for r in rows]
@@ -65,7 +67,7 @@ def export_csv():
     Se codifica al exportar, así también salen neutralizadas las filas guardadas antes.
     """
     with get_conn() as conn:
-        rows = conn.execute("SELECT author, body FROM comments ORDER BY id").fetchall()
+        rows = conn.execute("SELECT author, body FROM comments WHERE status = 'approved' ORDER BY id").fetchall()
     buffer = io.StringIO()
     writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
     writer.writerow(["author", "body"])
@@ -82,21 +84,45 @@ def export_csv():
 def list_comments_json():
     # API JSON: devuelve los datos crudos. Codificar o sanear es responsabilidad de quien los renderiza.
     with get_conn() as conn:
-        rows = conn.execute("SELECT id, author, body FROM comments ORDER BY id").fetchall()
+        rows = conn.execute("SELECT id, author, body FROM comments WHERE status = 'approved' ORDER BY id").fetchall()
     return [dict(r) for r in rows]
 
 
 @router.post("/comments", status_code=201)
 def create_comment(payload: CommentIn):
+    # Etapa 2: el comentario nace 'pending' y solo se publica con un veredicto válido.
     with get_conn() as conn:
-        conn.execute("INSERT INTO comments (author, body) VALUES (?, ?)", (payload.author, payload.body))
-    return {"status": "created"}
+        cur = conn.execute(
+            "INSERT INTO comments (author, body, status) VALUES (?, ?, 'pending')", (payload.author, payload.body)
+        )
+        comment_id = cur.lastrowid
+
+    try:
+        verdict = moderation_client.moderate(comment_id, payload.author, payload.body)
+    except moderation_client.ModerationUnavailable as exc:
+        # Falla cerrado: queda 'pending' (no se publica, no se pierde) y el cliente se entera.
+        log_event("moderation_unavailable", comment_id=str(comment_id), error=type(exc.__cause__ or exc).__name__)
+        return JSONResponse(
+            status_code=503,
+            content={"status": "pending", "detail": "moderation unavailable; the comment was not published"},
+        )
+
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE comments SET status = ?, moderation_reason = ? WHERE id = ?",
+            (verdict.status, verdict.reason, comment_id),
+        )
+    if verdict.status == "rejected":
+        # reason viene de otro servicio: dato no confiable. Va en JSON (no en HTML)
+        # y el front lo muestra con textContent.
+        return JSONResponse(status_code=422, content={"status": "rejected", "reason": verdict.reason})
+    return {"status": "approved", "id": comment_id}
 
 
 @router.get("/comments", response_class=HTMLResponse)
 def list_comments(request: Request, filter: Annotated[str, Query(max_length=50)] = ""):
     with get_conn() as conn:
-        rows = conn.execute("SELECT author, body FROM comments ORDER BY id").fetchall()
+        rows = conn.execute("SELECT author, body FROM comments WHERE status = 'approved' ORDER BY id").fetchall()
     # Se sanitiza en la salida, así también quedan seguras las filas guardadas antes (o por la ruta vulnerable).
     comments = [{"author": r["author"], "body_html": sanitize_html(r["body"])} for r in rows]
     return templates.get_template("secure_comments.html").render(

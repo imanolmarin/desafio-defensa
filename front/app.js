@@ -106,7 +106,15 @@ form.addEventListener("submit", async event => {
     form.classList.remove("touched");
     loadComments();
   } else if (response.status === 422) {
-    statusLine.textContent = "El servidor rechazó los datos. Revisá el usuario y el comentario.";
+    const data = await response.json().catch(() => ({}));
+    if (data.status === "rejected" && typeof data.reason === "string") {
+      // reason viene de moderation-service: dato no confiable, solo como texto.
+      statusLine.textContent = `Moderación rechazó el comentario: ${data.reason}`;
+    } else {
+      statusLine.textContent = "El servidor rechazó los datos. Revisá el usuario y el comentario.";
+    }
+  } else if (response.status === 503) {
+    statusLine.textContent = "La moderación no está disponible: el comentario quedó pendiente y no se publicó.";
   } else if (response.status === 429) {
     statusLine.textContent = "Demasiados intentos. Esperá unos segundos.";
   } else {

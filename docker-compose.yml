@@ -15,3 +15,28 @@ services:
     # Sin puertos publicados: solo accesible por el gateway (o por SSRF desde adentro).
     expose:
       - "8000"
+    environment:
+      MODERATION_URL: https://moderation-service:8443
+      MODERATION_CA: /certs/ca.crt
+      MODERATION_CERT: /certs/comments-client.crt
+      MODERATION_KEY: /certs/comments-client.key
+    volumes:
+      # Cada servicio monta SOLO lo suyo: nunca la clave de la CA ni la del otro servicio.
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/comments-client.crt:/certs/comments-client.crt:ro
+      - ./certs/comments-client.key:/certs/comments-client.key:ro
+    depends_on:
+      - moderation-service
+
+  moderation-service:
+    build: ./moderation-service
+    # Ni "ports" ni ruta en el gateway: solo se llega desde la red interna de Docker,
+    # y aun así el handshake exige un certificado de cliente de la CA del proyecto.
+    expose:
+      - "8443"
+    environment:
+      ALLOWED_CLIENTS: comments-service
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/moderation.crt:/certs/moderation.crt:ro
+      - ./certs/moderation.key:/certs/moderation.key:ro

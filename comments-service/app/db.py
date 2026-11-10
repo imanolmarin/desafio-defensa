@@ -20,7 +20,11 @@ CREATE TABLE users (
 CREATE TABLE comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     author TEXT NOT NULL,
-    body TEXT NOT NULL
+    body TEXT NOT NULL,
+    -- Etapa 2: solo los 'approved' se publican. Las rutas /vuln insertan sin
+    -- pasar por moderación (quedan 'approved' por defecto, a propósito).
+    status TEXT NOT NULL DEFAULT 'approved' CHECK (status IN ('pending', 'approved', 'rejected')),
+    moderation_reason TEXT
 );
 """
 

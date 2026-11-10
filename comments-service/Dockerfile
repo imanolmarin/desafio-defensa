@@ -11,7 +11,8 @@ COPY app ./app
 COPY data ./data
 
 # Corre como usuario no root; la base vive en una ubicación temporal con escritura.
-RUN useradd --create-home appuser
+# UID fijo: coincide con el dueño de la clave de cliente montada (0600).
+RUN useradd --uid 1000 --create-home appuser
 USER appuser
 ENV DB_PATH=/tmp/app.db
 
