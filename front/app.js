@@ -6,9 +6,52 @@ const form = document.getElementById("comment-form");
 const statusLine = document.getElementById("status");
 const filterInfo = document.getElementById("filter-info");
 
+// Allowlist para el HTML de los comentarios: el mismo criterio que sanitize.py
+// en el backend (formato básico y links https/mailto, nada más).
+const PURIFY_CONFIG = {
+  ALLOWED_TAGS: ["b", "i", "em", "strong", "p", "br", "ul", "ol", "li", "a", "code"],
+  ALLOWED_ATTR: ["href", "title"],
+  ALLOWED_URI_REGEXP: /^(?:https:|mailto:)/i,
+};
+
+if (window.DOMPurify) {
+  // Los links de terceros no reciben window.opener ni Referer.
+  DOMPurify.addHook("afterSanitizeAttributes", node => {
+    if (node.tagName === "A") {
+      node.setAttribute("rel", "noopener noreferrer nofollow");
+      node.setAttribute("target", "_blank");
+    }
+  });
+}
+
+function renderRichText(container, html) {
+  if (!window.DOMPurify) {
+    // Falla cerrado: sin sanitizer, el comentario se muestra como texto plano.
+    container.textContent = html;
+    return;
+  }
+  container.replaceChildren(DOMPurify.sanitize(html, { ...PURIFY_CONFIG, RETURN_DOM_FRAGMENT: true }));
+}
+
+function renderFilterInfo(filter) {
+  // El filtro sale de location.hash: lo controla quien arma el link. Solo texto.
+  filterInfo.replaceChildren();
+  if (!filter) return;
+  const value = document.createElement("b");
+  value.textContent = filter;
+  const all = document.createElement("a");
+  all.href = "#";
+  all.textContent = "ver todos";
+  filterInfo.append("Filtrando por: ", value, " · ", all);
+}
+
 function currentFilter() {
   // El filtro por autor viaja en el hash: /app/#alice
-  return decodeURIComponent(location.hash.slice(1));
+  try {
+    return decodeURIComponent(location.hash.slice(1));
+  } catch {
+    return ""; // hash mal codificado (%E0%A4%A): se ignora
+  }
 }
 
 async function loadComments() {
@@ -20,8 +63,7 @@ async function loadComments() {
   const comments = await response.json();
   const filter = currentFilter();
 
-  // Muestra el filtro activo resaltado en negrita.
-  filterInfo.innerHTML = filter ? `Filtrando por: <b>${filter}</b> · <a href="#">ver todos</a>` : "";
+  renderFilterInfo(filter);
 
   list.replaceChildren();
   comments
@@ -36,8 +78,8 @@ async function loadComments() {
 
       const body = document.createElement("div");
       body.className = "body";
-      // El comentario admite formato (negritas, links), por eso se inserta como HTML.
-      body.innerHTML = c.body;
+      // El comentario admite formato (negritas, links): se sanea con allowlist antes de insertarlo.
+      renderRichText(body, c.body);
 
       item.append(author, body);
       list.append(item);
